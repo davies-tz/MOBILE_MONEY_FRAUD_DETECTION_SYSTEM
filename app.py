@@ -77,4 +77,4 @@ transaction_frequency = st.number_input(
     min_value=0,
     max_value=50,
     step=1
-)    app.py yake ndo hii je inashida
+) 
