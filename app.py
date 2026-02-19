@@ -60,6 +60,7 @@ st.write("AI-powered fraud detection for Tanzania Mobile Money Transactions")
 # ==============================
 
 model = joblib.load("model.pkl")
+st.write("Model expects:", model.n_features_in_, "features")
 
 st.header("Enter Transaction Details")
 
