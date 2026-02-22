@@ -290,38 +290,32 @@ if st.session_state.get("admin"):
 # =====================================
 # POWER BI EXPORT
 # =====================================
-import pandas as pd
 import streamlit as st
+import pandas as pd
 
+# Load data
+df = pd.read_csv("transactions.csv")  # au source yako
+
+st.write("DataFrame type:", type(df))
+st.write("DataFrame preview:")
+st.write(df.head())
+
+# Define function
 def export_powerbi_csv(df):
-    """
-    Inahifadhi transactions kwa CSV kwa Power BI
-    - Inaunda column mpya za Month na Year kwa analysis
-    """
-    # Angalia kama df ipo
     if df is None:
-        st.error("DataFrame haipo! Hakikisha data imeload kwanza.")
+        st.error("DataFrame haipo!")
         return
     if df.empty:
         st.warning("DataFrame ni tupu, CSV haitahifadhiwa.")
         return
 
-    # Copy ya df ili isibadilike asili
     df_copy = df.copy()
-    
-    # Hakikisha timestamp iko kwa datetime format
     df_copy['timestamp'] = pd.to_datetime(df_copy['timestamp'])
-    
-    # Ongeza column za Year na Month
     df_copy['Year'] = df_copy['timestamp'].dt.year
     df_copy['Month'] = df_copy['timestamp'].dt.month
-    
-    # Hifadhi CSV kwenye server
     df_copy.to_csv("powerbi_data.csv", index=False)
-    
     st.success("Power BI CSV imehifadhiwa (powerbi_data.csv) ✅")
     
-    # Optional: download button kwa user
     csv = df_copy.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="Pakua CSV kwa Power BI",
@@ -330,10 +324,6 @@ def export_powerbi_csv(df):
         mime="text/csv"
     )
 
-# 🔹 Call function baada ya data ku-load
-# Hakikisha hapa df imeload
-# Mfano:
-# df = pd.read_csv("transactions.csv")
-
+# Call function
 export_powerbi_csv(df)
 
