@@ -21,6 +21,17 @@ st.set_page_config(page_title="Fraud Detection System", layout="wide")
 conn = sqlite3.connect("transactions.db", check_same_thread=False)
 c = conn.cursor()
 
+# Users Table
+c.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    password TEXT,
+    role TEXT
+)
+""")
+
+conn.commit()
+
 # Transactions Table
 c.execute("""
 CREATE TABLE IF NOT EXISTS transactions (
@@ -37,16 +48,6 @@ CREATE TABLE IF NOT EXISTS transactions (
 )
 """)
 
-# Users Table
-c.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    username TEXT PRIMARY KEY,
-    password TEXT,
-    role TEXT
-)
-""")
-
-conn.commit()
 
 # =====================================
 # PASSWORD HASH FUNCTION
