@@ -290,32 +290,50 @@ if st.session_state.get("admin"):
 # =====================================
 # POWER BI EXPORT
 # =====================================
-def export_powerbi_csv(df):
-    """
-    Exports transactions to CSV for Power BI
-    - Adds Month, Year columns for analysis
-    """
-    if not df.empty:
-        df_copy = df.copy()
-        df_copy['timestamp'] = pd.to_datetime(df_copy['timestamp'])
-        df_copy['Year'] = df_copy['timestamp'].dt.year
-        df_copy['Month'] = df_copy['timestamp'].dt.month
-        df_copy.to_csv("powerbi_data.csv", index=False)
-
-# Auto-export after loading dashboard
-export_powerbi_csv(df)
-st.info("Power BI CSV updated (powerbi_data.csv)")
-
+import pandas as pd
 import streamlit as st
 
-def download_powerbi_csv(df):
-    if df is not None and not df.empty:
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Pakua CSV kwa Power BI",
-            data=csv,
-            file_name="powerbi_data.csv",
-            mime="text/csv"
-        )
-    else:
-        st.error("DataFrame ni tupu au sio sahihi!")
+def export_powerbi_csv(df):
+    """
+    Inahifadhi transactions kwa CSV kwa Power BI
+    - Inaunda column mpya za Month na Year kwa analysis
+    """
+    # Angalia kama df ipo
+    if df is None:
+        st.error("DataFrame haipo! Hakikisha data imeload kwanza.")
+        return
+    if df.empty:
+        st.warning("DataFrame ni tupu, CSV haitahifadhiwa.")
+        return
+
+    # Copy ya df ili isibadilike asili
+    df_copy = df.copy()
+    
+    # Hakikisha timestamp iko kwa datetime format
+    df_copy['timestamp'] = pd.to_datetime(df_copy['timestamp'])
+    
+    # Ongeza column za Year na Month
+    df_copy['Year'] = df_copy['timestamp'].dt.year
+    df_copy['Month'] = df_copy['timestamp'].dt.month
+    
+    # Hifadhi CSV kwenye server
+    df_copy.to_csv("powerbi_data.csv", index=False)
+    
+    st.success("Power BI CSV imehifadhiwa (powerbi_data.csv) ✅")
+    
+    # Optional: download button kwa user
+    csv = df_copy.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="Pakua CSV kwa Power BI",
+        data=csv,
+        file_name="powerbi_data.csv",
+        mime="text/csv"
+    )
+
+# 🔹 Call function baada ya data ku-load
+# Hakikisha hapa df imeload
+# Mfano:
+# df = pd.read_csv("transactions.csv")
+
+export_powerbi_csv(df)
+
