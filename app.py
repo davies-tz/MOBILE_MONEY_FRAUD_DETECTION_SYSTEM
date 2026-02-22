@@ -1,68 +1,45 @@
 import streamlit as st
-import sqlite3
 import joblib
 import uuid
-import hashlib
+from datetime import datetime
+import sqlite3
+
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+import hashlib
 
-# =====================================
-# PAGE CONFIG
-# =====================================
-st.set_page_config(page_title="Fraud Detection System", layout="wide")
+# ==============================
+# DATABASE SETUP
+# ==============================
 
-# =====================================
-# DATABASE CONNECTION
-# =====================================
 conn = sqlite3.connect("transactions.db", check_same_thread=False)
 c = conn.cursor()
 
-# Users Table
+# ==============================
+# USERS TABLE (FOR ADMIN LOGIN)
+# ==============================
+
 c.execute("""
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,
-    password TEXT,
-    role TEXT
+    password TEXT
 )
 """)
-
 conn.commit()
 
-# Transactions Table
-c.execute("""
-CREATE TABLE IF NOT EXISTS transactions (
-    id TEXT,
-    timestamp TEXT,
-    amount REAL,
-    sender_age INTEGER,
-    location_risk INTEGER,
-    fraud_probability REAL,
-    risk_level TEXT,
-    prediction INTEGER,
-    latitude REAL,
-    longitude REAL
-)
-""")
-
-
-# =====================================
-# PASSWORD HASH FUNCTION
-# =====================================
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Create default admin
-c.execute("INSERT OR IGNORE INTO users VALUES (?, ?, ?)",
-          ("admin", hash_password("daz123"), "admin"))
+# create default admin
+c.execute("INSERT OR IGNORE INTO users VALUES (?, ?)",
+          ("admin", hash_password("daz123")))
 conn.commit()
 
-# =====================================
-# LOGIN SYSTEM
-# =====================================
+# ==============================
+# LOGIN
+# ==============================
+
 st.sidebar.title("🔐 Admin Login")
 
 username = st.sidebar.text_input("Username")
@@ -75,41 +52,146 @@ if st.sidebar.button("Login"):
     user = c.fetchone()
 
     if user:
-        st.session_state["logged_in"] = True
-        st.session_state["role"] = user[2]
+        st.session_state["admin"] = True
         st.sidebar.success("Login successful")
     else:
         st.sidebar.error("Invalid credentials")
+#------------------------------------------------------------------------------------------------------------
+c.execute("""
+CREATE TABLE IF NOT EXISTS transactions (
+    id TEXT,
+    timestamp TEXT,
+    amount REAL,
+    sender_age INTEGER,
+    location_risk INTEGER,
+    fraud_probability REAL,
+    risk_level TEXT,
+    prediction INTEGER,
+    reason TEXT
+)
+""")
+conn.commit()
 
-# =====================================
-# MAIN APP
-# =====================================
-if st.session_state.get("logged_in"):
+# ==============================
+# PAGE CONFIG
+# ==============================
 
-    st.title("🇹🇿 Mobile Money Fraud Detection Dashboard")
+st.set_page_config(page_title="Fraud Detection System", layout="centered")
 
-    # Auto refresh every 15 seconds
-    st_autorefresh(interval=15000, key="refresh")
+# DARK THEME
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #001f4d;
+        color: white;
+    }
+    button[kind="primary"] {
+        background-color: #1E90FF;
+        color: white;
+        font-size: 18px;
+        padding: 10px 20px;
+        border-radius: 10px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-    model = joblib.load("model.pkl")
+st.title("🇹🇿 MOBILE MONEY FRAUD DETECTION SYSTEM")
+st.write("AI-powered fraud detection for Tanzania Mobile Money Transactions")
 
-    # -----------------------------
-    # User Transaction Input
-    # -----------------------------
-    st.header("💳 Enter Transaction")
+# ==============================
+# LOAD MODEL
+# ==============================
 
-    amount = st.number_input("Amount (TZS)", min_value=100.0)
-    sender_age = st.number_input("Sender Age", min_value=5, max_value=90)
-    location_risk = st.slider("Location Risk (0=Low,1=High)", 0, 1)
-    latitude = st.number_input("Latitude", value=-6.8)
-    longitude = st.number_input("Longitude", value=39.2)
+model = joblib.load("model.pkl")
+st.write("Model expects:", model.n_features_in_, "features")
 
-    if st.button("Analyze Transaction"):
+st.header("Enter Transaction Details")
 
-        input_data = [[amount, sender_age, 0, 0, 1, location_risk]]
+# ==============================
+# INPUTS
+# ==============================
+
+amount = st.number_input(
+    "Transaction Amount (TZS)",
+    min_value=100.0,
+    step=100.0
+)
+
+sender_age = st.number_input(
+    "Sender Age",
+    min_value=5,
+    max_value=90,
+    step=1
+)
+
+receiver_new_account = st.selectbox("Receiver New Account?", ["No", "Yes"])
+device_change = st.selectbox("Device Change?", ["No", "Yes"])
+
+transaction_frequency = st.number_input(
+    "Transaction Frequency (per day)",
+    min_value=0,
+    max_value=50,
+    step=1
+)
+
+location_risk = st.slider("Location Risk Level (0 = Low Risk Area, 1 = High Risk Area)", 0, 1)
+
+# Convert categorical inputs
+receiver_new_account = 1 if receiver_new_account == "Yes" else 0
+device_change = 1 if device_change == "Yes" else 0
+
+
+# ==============================
+# PREDICTION BUTTON
+# ==============================
+
+if st.button("🔍 Analyze Transaction", type="primary"):
+
+    fraud_probability = 0
+    prediction = 0
+    risk_level = "LOW RISK"
+    reason = "Model-based evaluation"
+
+    # ==================================
+    # BUSINESS RULES VALIDATION
+    # ==================================
+
+    if amount > 50000000:
+        prediction = 1
+        fraud_probability = 0.99
+        risk_level = "HIGH RISK"
+        reason = "Suspiciously large transaction amount entered at once."
+
+    elif sender_age < 18:
+        prediction = 1
+        fraud_probability = 0.95
+        risk_level = "HIGH RISK"
+        reason = "Underage user not legally allowed to perform mobile money transactions."
+
+    else:
+        # ==================================
+        # MODEL PREDICTION
+        # ==================================
+        input_data = [[
+            amount,
+            sender_age,
+            receiver_new_account,
+            device_change,
+            transaction_frequency,
+            location_risk
+        ]]
+
         prediction = model.predict(input_data)[0]
-        fraud_probability = model.predict_proba(input_data)[0][1]
 
+        if hasattr(model, "predict_proba"):
+            fraud_probability = model.predict_proba(input_data)[0][1]
+        else:
+            fraud_probability = float(prediction)
+
+        # Risk Level classification
         if fraud_probability > 0.7:
             risk_level = "HIGH RISK"
         elif fraud_probability > 0.4:
@@ -117,37 +199,57 @@ if st.session_state.get("logged_in"):
         else:
             risk_level = "LOW RISK"
 
-        if prediction == 1:
-            st.error("⚠ FRAUD DETECTED")
-        else:
-            st.success("✅ SAFE")
+        reason = "AI model analysis based on transaction behavior."
 
-        transaction_id = str(uuid.uuid4())
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # ==================================
+    # DISPLAY RESULTS
+    # ==================================
 
-        c.execute("""
-        INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            transaction_id,
-            timestamp,
-            amount,
-            sender_age,
-            location_risk,
-            fraud_probability,
-            risk_level,
-            int(prediction),
-            latitude,
-            longitude
-        ))
+    if prediction == 1:
+        st.error("⚠ FRAUD DETECTED!")
+    else:
+        st.success("✅ Transaction is SAFE")
 
-        conn.commit()
-        st.info("Transaction recorded successfully.")
+    st.write(f"**Fraud Probability:** {fraud_probability:.2f}")
+    st.write(f"**Risk Level:** {risk_level}")
+    st.write(f"**Reason:** {reason}")
 
-    # -----------------------------
-    # Admin Dashboard
-    # -----------------------------
+    # ==================================
+    # SAVE TO DATABASE
+    # ==================================
+
+    transaction_id = str(uuid.uuid4())
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    c.execute("""
+        INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        transaction_id,
+        timestamp,
+        amount,
+        sender_age,
+        location_risk,
+        fraud_probability,
+        risk_level,
+        int(prediction),
+        reason
+    ))
+
+    conn.commit()
+
+    st.info("Transaction recorded successfully.")
+    #------------------------------------------------------------
+# =====================================
+# ADMIN DASHBOARD
+# =====================================
+
+if st.session_state.get("admin"):
+
     st.markdown("---")
-    st.header("📊 Admin Dashboard")
+    st.header("📊 ADMIN FRAUD DASHBOARD")
+
+    # Auto refresh every 15 seconds
+    st_autorefresh(interval=15000, key="refresh")
 
     df = pd.read_sql_query("SELECT * FROM transactions", conn)
 
@@ -156,9 +258,7 @@ if st.session_state.get("logged_in"):
         st.subheader("📋 Transaction Table")
         st.dataframe(df)
 
-        # -----------------------------
-        # Download CSV
-        # -----------------------------
+        # DOWNLOAD CSV
         st.download_button(
             "⬇ Download CSV",
             df.to_csv(index=False),
@@ -166,68 +266,27 @@ if st.session_state.get("logged_in"):
             "text/csv"
         )
 
-        # -----------------------------
-        # Delete Transaction
-        # -----------------------------
+        # DELETE TRANSACTION
         delete_id = st.selectbox("Select Transaction ID to Delete", df["id"])
         if st.button("Delete Selected Transaction"):
             c.execute("DELETE FROM transactions WHERE id=?", (delete_id,))
             conn.commit()
             st.success("Transaction Deleted")
 
-        # -----------------------------
-        # Pie Chart
-        # -----------------------------
+        # PIE CHART
         st.subheader("🥧 Risk Distribution")
-        fig_pie = px.pie(df, names="risk_level", title="Risk Levels")
+        fig_pie = px.pie(df, names="risk_level")
         st.plotly_chart(fig_pie, use_container_width=True)
 
-        # -----------------------------
-        # Fraud Heatmap
-        # -----------------------------
-        st.subheader("🗺 Fraud Heatmap")
-        fig_map = px.density_mapbox(
-            df,
-            lat="latitude",
-            lon="longitude",
-            z="fraud_probability",
-            radius=10,
-            center=dict(lat=-6.8, lon=39.2),
-            zoom=5,
-            mapbox_style="open-street-map"
-        )
-        st.plotly_chart(fig_map, use_container_width=True)
+        # FRAUD TREND
+        st.subheader("📈 Fraud Probability Trend")
+        df_sorted = df.sort_values("timestamp")
+        fig_line = px.line(df_sorted, y="fraud_probability")
+        st.plotly_chart(fig_line, use_container_width=True)
 
-        # -----------------------------
-        # Monthly PDF Report
-        # -----------------------------
-        def generate_report():
-            doc = SimpleDocTemplate("monthly_report.pdf")
-            elements = []
-            styles = getSampleStyleSheet()
+    else:
+        st.warning("No transactions recorded yet.")
 
-            total = len(df)
-            frauds = df["prediction"].sum()
-
-            elements.append(Paragraph("Monthly Fraud Report", styles["Title"]))
-            elements.append(Spacer(1, 12))
-            elements.append(Paragraph(f"Total Transactions: {total}", styles["Normal"]))
-            elements.append(Paragraph(f"Total Fraud Cases: {frauds}", styles["Normal"]))
-
-            doc.build(elements)
-
-        if st.button("📄 Generate Monthly PDF Report"):
-            generate_report()
-            st.success("Report Generated (monthly_report.pdf)")
-
-        # -----------------------------
-        # Power BI CSV Export
-        # -----------------------------
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        df['Year'] = df['timestamp'].dt.year
-        df['Month'] = df['timestamp'].dt.month
-        df.to_csv("powerbi_data.csv", index=False)
-        st.info("Power BI CSV updated (powerbi_data.csv)")
-
-else:
-    st.warning("Please login to access dashboard.")
+# =====================================
+# POWER BI EXPORT
+# =====================================
