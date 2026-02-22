@@ -6,3 +6,4 @@ numpy
 joblib
 matplotlib
 plotly
+streamlit-autorefresh
