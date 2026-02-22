@@ -4,6 +4,11 @@ import uuid
 from datetime import datetime
 import sqlite3
 
+import pandas as pd
+import plotly.express as px
+from streamlit_autorefresh import st_autorefresh
+import hashlib
+
 # ==============================
 # DATABASE SETUP
 # ==============================
@@ -11,6 +16,47 @@ import sqlite3
 conn = sqlite3.connect("transactions.db", check_same_thread=False)
 c = conn.cursor()
 
+# ==============================
+# USERS TABLE (FOR ADMIN LOGIN)
+# ==============================
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    password TEXT
+)
+""")
+conn.commit()
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# create default admin
+c.execute("INSERT OR IGNORE INTO users VALUES (?, ?)",
+          ("admin", hash_password("daz123")))
+conn.commit()
+
+# ==============================
+# LOGIN
+# ==============================
+
+st.sidebar.title("🔐 Admin Login")
+
+username = st.sidebar.text_input("Username")
+password = st.sidebar.text_input("Password", type="password")
+
+if st.sidebar.button("Login"):
+    hashed = hash_password(password)
+    c.execute("SELECT * FROM users WHERE username=? AND password=?",
+              (username, hashed))
+    user = c.fetchone()
+
+    if user:
+        st.session_state["admin"] = True
+        st.sidebar.success("Login successful")
+    else:
+        st.sidebar.error("Invalid credentials")
+#------------------------------------------------------------------------------------------------------------
 c.execute("""
 CREATE TABLE IF NOT EXISTS transactions (
     id TEXT,
@@ -192,3 +238,70 @@ if st.button("🔍 Analyze Transaction", type="primary"):
     conn.commit()
 
     st.info("Transaction recorded successfully.")
+    #------------------------------------------------------------
+# =====================================
+# ADMIN DASHBOARD
+# =====================================
+
+if st.session_state.get("admin"):
+
+    st.markdown("---")
+    st.header("📊 ADMIN FRAUD DASHBOARD")
+
+    # Auto refresh every 15 seconds
+    st_autorefresh(interval=15000, key="refresh")
+
+    df = pd.read_sql_query("SELECT * FROM transactions", conn)
+
+    if not df.empty:
+
+        st.subheader("📋 Transaction Table")
+        st.dataframe(df)
+
+        # DOWNLOAD CSV
+        st.download_button(
+            "⬇ Download CSV",
+            df.to_csv(index=False),
+            "transactions.csv",
+            "text/csv"
+        )
+
+        # DELETE TRANSACTION
+        delete_id = st.selectbox("Select Transaction ID to Delete", df["id"])
+        if st.button("Delete Selected Transaction"):
+            c.execute("DELETE FROM transactions WHERE id=?", (delete_id,))
+            conn.commit()
+            st.success("Transaction Deleted")
+
+        # PIE CHART
+        st.subheader("🥧 Risk Distribution")
+        fig_pie = px.pie(df, names="risk_level")
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+        # FRAUD TREND
+        st.subheader("📈 Fraud Probability Trend")
+        df_sorted = df.sort_values("timestamp")
+        fig_line = px.line(df_sorted, y="fraud_probability")
+        st.plotly_chart(fig_line, use_container_width=True)
+
+    else:
+        st.warning("No transactions recorded yet.")
+
+# =====================================
+# POWER BI EXPORT
+# =====================================
+def export_powerbi_csv(df):
+    """
+    Exports transactions to CSV for Power BI
+    - Adds Month, Year columns for analysis
+    """
+    if not df.empty:
+        df_copy = df.copy()
+        df_copy['timestamp'] = pd.to_datetime(df_copy['timestamp'])
+        df_copy['Year'] = df_copy['timestamp'].dt.year
+        df_copy['Month'] = df_copy['timestamp'].dt.month
+        df_copy.to_csv("powerbi_data.csv", index=False)
+
+# Auto-export after loading dashboard
+export_powerbi_csv(df)
+st.info("Power BI CSV updated (powerbi_data.csv)")
