@@ -305,3 +305,17 @@ def export_powerbi_csv(df):
 # Auto-export after loading dashboard
 export_powerbi_csv(df)
 st.info("Power BI CSV updated (powerbi_data.csv)")
+
+import streamlit as st
+
+def download_powerbi_csv(df):
+    if df is not None and not df.empty:
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Pakua CSV kwa Power BI",
+            data=csv,
+            file_name="powerbi_data.csv",
+            mime="text/csv"
+        )
+    else:
+        st.error("DataFrame ni tupu au sio sahihi!")
